@@ -18,8 +18,7 @@ def main():
     # Connect to the database
     conn = get_db_connection()
     cursor = conn.cursor()
-
-
+    
     '''
         The following is just for testing purposes, 
         you can modify it to meet the requirements of your implmentation.
