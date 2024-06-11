@@ -1,31 +1,42 @@
 from database.connection import get_db_connection
-from models.article import Article
+
 class Author:
     def __init__(self, id, name):
-        self._id = id
-        self._name = name
+        self.id = id
+        self.name = name
+        if id is None:
+            self._save_to_db()
+
+    def __repr__(self):
+        return f'<Author {self.name}>'
+
+    def _save_to_db(self):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO authors (name) VALUES (?)', (self.name,))
+        self.id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
     @property
-    def id(self):
-        return self._id
+    def articles(self):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM articles WHERE author_id = ?', (self.id,))
+        articles = cursor.fetchall()
+        conn.close()
+        return [Article(article['id'], article['title'], article['content'], article['author_id'], article['magazine_id']) for article in articles]
+
     @property
-    def name(self):
-        return self._name
-    @name.setter
-    def name(self, value):
-        if not isinstance(value,str):
-            raise TypeError("Name must be a string.")
-        if len(value)==0:
-            raise ValueError("Name must not be empty.")
-        if hasattr(self,'_name'):
-            raise AttributeError("Name cannot be changed after instantiation.")
-        self._name = value
-    @classmethod
-    def get_authors(cls,cursor):
-        cursor.execute("SELECT * FROM authors")
-        authors_data = cursor.fetchall()
-        return [cls(id=row[0],name=row[1])for row in authors_data]
-    def articles(self,cursor):
-        cursor.execute("SELECT * FROM articleS WHERE author_id = ?", (self._id,)) 
-        articles_data = cursor.fetchall()
-        return articles_data   
-            
+    def magazines(self):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT DISTINCT magazines.id, magazines.name, magazines.category 
+            FROM magazines 
+            JOIN articles ON magazines.id = articles.magazine_id 
+            WHERE articles.author_id = ?
+        ''', (self.id,))
+        magazines = cursor.fetchall()
+        conn.close()
+        return [Magazine(magazine['id'], magazine['name'], magazine['category']) for magazine in magazines]

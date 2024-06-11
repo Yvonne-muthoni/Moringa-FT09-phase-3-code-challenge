@@ -1,67 +1,66 @@
 from database.connection import get_db_connection
-from models.author import Author
+
 class Magazine:
     def __init__(self, id, name, category):
-        self._id = id
-        self._name = name
-        self._category = category
+        self.id = id
+        self.name = name
+        self.category = category
+        if id is None:
+            self._save_to_db()
+
+    def __repr__(self):
+        return f'<Magazine {self.name}>'
+
+    def _save_to_db(self):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO magazines (name, category) VALUES (?, ?)', (self.name, self.category))
+        self.id = cursor.lastrowid
+        conn.commit()
+        conn.close()
 
     @property
-    def id(self):
-        return self._id
-    @property
-    def name(self):
-        return self._name
-        
-    @name.setter
-    def name(self, value,category):
-        if isinstance(value,str)and 2<=len(value)<=16:
-            self._name = value
-            self._category = category
-        else:
-            raise ValueError("Name must be a string between 2 and 16 characters")
-    @property
-    def category(self):
-        return self._category
-    @category.setter
-    def category(self, value):
-        if isinstance(value,str) and len(value)>0:
-            self._category = value
-        else:
-            raise ValueError("Category must be a non-empty string")
-            
-    @classmethod
-    def get_magazines(cls,cursor):
-        cursor.execute("SELECT * FROM magazines")
-        all_magazines = cursor.fetchall()
-        return[cls(magazine_data[0],magazine_data[1],magazine_data[2])for magazine_data in all_magazines]
+    def articles(self):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM articles WHERE magazine_id = ?', (self.id,))
+        articles = cursor.fetchall()
+        conn.close()
+        return [Article(article['id'], article['title'], article['content'], article['author_id'], article['magazine_id']) for article in articles]
 
-    def articles(self,cursor):
-        cursor.execute("SELECT * FROM articles WHERE magazine_id = ?",(self._id,))
-        articles_data = cursor.fetchall()
-        return articles_data
-    def contributors(self,cursor):
-        cursor.execute("""
-            SELECT authors.*
-            FROM authors
-            JOIN articles ON authors.id = articles.author_id
-            WHERE articles.magazine_id =?
-        """,(self._id,))
-        contributors_data = cursor.fetchall()
-        return contributors_data
-        
+    @property
+    def contributors(self):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT DISTINCT authors.id, authors.name 
+            FROM authors 
+            JOIN articles ON authors.id = articles.author_id 
+            WHERE articles.magazine_id = ?
+        ''', (self.id,))
+        authors = cursor.fetchall()
+        conn.close()
+        return [Author(author['id'], author['name']) for author in authors]
+
     def article_titles(self):
-        cursor.execute("SELECT title FROM articles WHERE magazine_id = ?", (self._id))
-        titles = [row[0]for row in cursor.fetchall()]
-        return titles if titles else None
-    def contributing_authors(self,cursor):
-        cursor.execute("""
-            SELECT authors.*, COUNT(*) AS article_count
+        articles = self.articles
+        if articles:
+            return [article.title for article in articles]
+        return None
+
+    def contributing_authors(self):
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT authors.id, authors.name, COUNT(articles.id) as article_count
             FROM authors
             JOIN articles ON authors.id = articles.author_id
-            WHERE articles.magazine_id=?
+            WHERE articles.magazine_id = ?
             GROUP BY authors.id
-            HAVING article_count>2  
-        """,(self._id,))
-        authors_data = cursor.fetchall()
-        return authors_data if authors_data else None
+            HAVING article_count > 2
+        ''', (self.id,))
+        authors = cursor.fetchall()
+        conn.close()
+        if authors:
+            return [Author(author['id'], author['name']) for author in authors]
+        return None
